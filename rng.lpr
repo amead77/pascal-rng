@@ -346,7 +346,7 @@ begin
         begin
           Write(Format(#13'Written %s (%s/s)', [
             FormatBytes(BytesWritten, Units),
-            FormatBytes(Round(speedBps), Units, TimeUnits)
+            FormatBytesPerTime(Round(speedBps), Units, TimeUnits)
           ]));
           Inc(nextPrintAt, 64 * 1024 * 1024);
         end;
@@ -362,7 +362,7 @@ begin
       else
         speedBps := 0;
       WriteLn;  // newline after progress line
-      WriteLn('Finished writing. Total: ', FormatBytes(BytesWritten, Units), ' Elapsed sec: ', FormatFloat('0.0', elapsedSec), ' Speed: ', FormatBytes(Round(speedBps), Units, TimeUnits));
+      WriteLn('Finished writing. Total: ', FormatBytes(BytesWritten, Units), ' Elapsed sec: ', FormatFloat('0.0', elapsedSec), ' Speed: ', FormatBytesPerTime(Round(speedBps), Units, TimeUnits));
     end;
 
     Result := BytesWritten;
@@ -381,6 +381,7 @@ var
   written: QWord;
   UnitsStr: string;
   TimeUnitStr: string;
+  s_timestr: string;
   Quiet: Boolean;
   Benchmark: Boolean;
   BlockSizeOverride: QWord;
@@ -422,8 +423,18 @@ begin
 
   // time units for rates: s, m, h (default s)
   TimeUnitStr := GetOptionValue('t', 'time-units');
-  if not (LowerCase(TimeUnitStr) in ['s', 'm', 'h']) then
+  s_timestr := LowerCase(TimeUnitStr);
+  case s_timestr of
+    's': TimeUnitStr := 's';
+    'm': TimeUnitStr := 'm';
+    'h': TimeUnitStr := 'h';
+  else
     TimeUnitStr := 's';
+  end;
+
+
+  //if (not (s_timestr[1] in ['s', 'm', 'h'])) then
+//    TimeUnitStr := 's';
 
   // block size override: -B/--block-size
   BlockSizeOverride := 0;

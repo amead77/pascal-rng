@@ -9,16 +9,13 @@
         <Filename Value="rng.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <CursorPos X="33" Y="85"/>
+        <TopLine Value="392"/>
+        <CursorPos X="17" Y="427"/>
         <UsageCount Value="23"/>
         <Loaded Value="True"/>
       </Unit>
     </Units>
     <JumpHistory HistoryIndex="29">
-      <Position>
-        <Filename Value="rng.lpr"/>
-        <Caret Line="63" Column="16" TopLine="42"/>
-      </Position>
       <Position>
         <Filename Value="rng.lpr"/>
         <Caret Line="73" Column="11" TopLine="46"/>
@@ -135,10 +132,29 @@
         <Filename Value="rng.lpr"/>
         <Caret Line="96" TopLine="50"/>
       </Position>
+      <Position>
+        <Filename Value="rng.lpr"/>
+        <Caret Line="85" Column="33" TopLine="28"/>
+      </Position>
     </JumpHistory>
     <RunParams>
       <FormatVersion Value="2"/>
-      <Modes ActiveMode=""/>
+      <Modes ActiveMode="default">
+        <Mode Name="default">
+          <local>
+            <CommandLineParams Value="-o temp.tmp -s 50M -v"/>
+          </local>
+        </Mode>
+      </Modes>
     </RunParams>
+    <HistoryLists>
+      <List Name="WorkingDirectory" Type="File" Count="1"/>
+      <List Name="LaunchingApplication" Type="File" Count="2">
+        <Item2 Value="/usr/bin/gnome-terminal -t &apos;Lazarus Run Output&apos; -e &apos;$(LazarusDir)/tools/runwait.sh $(TargetCmdLine)&apos;"/>
+      </List>
+      <List Name="CommandLineParameters" Count="2">
+        <Item1 Value="-o temp.tmp -s 50M -v"/>
+      </List>
+    </HistoryLists>
   </ProjectSession>
 </CONFIG>
