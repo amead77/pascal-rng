@@ -1,6 +1,6 @@
 program rng;
 {$ASMMODE INTEL}
-{$mode objfpc}{$H+}
+{$mode objfpc}{$H+}{$modeswitch advancedrecords}
 
 uses
   {$IFDEF UNIX}
@@ -50,6 +50,84 @@ begin
     Result := 0;
   end;
 end;
+
+// Format bytes into the requested unit (b, kb, mb, gb, tb). Uses 1024 base.
+// Basic version without time units
+function FormatBytes(const Bytes: QWord; const Units: string): string;
+var
+  f: Double;
+  u: string;
+begin
+  u := LowerCase(Units);
+  if u = 'b' then
+    f := Bytes
+  else if u = 'kb' then
+    f := Bytes / 1024.0
+  else if u = 'mb' then
+    f := Bytes / (1024.0 * 1024.0)
+  else if u = 'gb' then
+    f := Bytes / (1024.0 * 1024.0 * 1024.0)
+  else if u = 'tb' then
+    f := Bytes / (1024.0 * 1024.0 * 1024.0 * 1024.0)
+  else
+  begin
+    // default to MB
+    f := Bytes / (1024.0 * 1024.0);
+    u := 'mb';
+  end;
+
+  // Format with appropriate precision
+  if u = 'b' then
+    Result := FormatFloat('#,##0', f)
+  else
+    Result := FormatFloat('#,##0.00', f);
+  Result := Result + ' ' + UpperCase(u);
+end;
+
+// Format bytes with time units for rates (e.g., MB/s, GB/h)
+function FormatBytesPerTime(const Bytes: QWord; const Units: string; const TimeUnit: string): string;
+var
+  f: Double;
+  u, t: string;
+begin
+  u := LowerCase(Units);
+  if u = 'b' then
+    f := Bytes
+  else if u = 'kb' then
+    f := Bytes / 1024.0
+  else if u = 'mb' then
+    f := Bytes / (1024.0 * 1024.0)
+  else if u = 'gb' then
+    f := Bytes / (1024.0 * 1024.0 * 1024.0)
+  else if u = 'tb' then
+    f := Bytes / (1024.0 * 1024.0 * 1024.0 * 1024.0)
+  else
+  begin
+    // default to MB
+    f := Bytes / (1024.0 * 1024.0);
+    u := 'mb';
+  end;
+
+  // Apply time unit conversion
+  t := LowerCase(TimeUnit);
+  if t = 'm' then
+    f := f * 60.0  // convert to per minute
+  else if t = 'h' then
+    f := f * 3600.0  // convert to per hour
+  else
+    t := 's';
+
+  // Format with appropriate precision
+  if u = 'b' then
+    Result := FormatFloat('#,##0', f)
+  else
+    Result := FormatFloat('#,##0.00', f);
+  
+  // Add units with time unit
+  Result := Result + ' ' + UpperCase(u);
+  Result := Result + '/' + t;
+end;
+
 
 function HasRDRAND: Boolean;
 var
@@ -157,7 +235,7 @@ begin
     Result := 0;
 end;
 
-function CreateRandomFile(const FileName: string; const SizeBytes: QWord; const DryRun: Boolean; const Verbose: Boolean): QWord;
+function CreateRandomFile(const FileName: string; const SizeBytes: QWord; const DryRun: Boolean; const Verbose: Boolean; const Units: string; const TimeUnits: string; const Quiet: Boolean; const BlockSizeOverride: QWord): QWord;
 const
   DefaultBlockSize = 16 shl 20; // 16 MiB
 var
@@ -170,6 +248,7 @@ var
   i: NativeUInt;
   // v removed; use bulk rdrand fill
   rdrandOk: Boolean;
+  effVerbose: Boolean;
   lastPercent: Integer;
   percent: Integer;
   nextPrintAt: QWord;
@@ -189,9 +268,11 @@ begin
     Exit;
   end;
 
-  // ensure block size is multiple of 8 and not larger than requested size (if provided)
-  if (SizeBytes <> 0) and (DefaultBlockSize > SizeBytes) then
-    BlockSize := ((SizeBytes + 7) div 8) * 8
+  // determine block size: use override if provided, otherwise default. Ensure multiple of 8.
+  if (BlockSizeOverride > 0) then
+    BlockSize := NativeUInt(((BlockSizeOverride + 7) div 8) * 8)
+  else if (SizeBytes <> 0) and (DefaultBlockSize > SizeBytes) then
+    BlockSize := NativeUInt(((SizeBytes + 7) div 8) * 8)
   else
     BlockSize := DefaultBlockSize;
 
@@ -238,7 +319,9 @@ begin
       Inc(BytesWritten, ToWrite);
 
       // progress reporting
-      if Verbose then
+      // effective verbosity: verbose flag and not quiet
+      effVerbose := Verbose and (not Quiet);
+      if effVerbose then
       begin
         elapsedSec := (MilliSecondsBetween(Now, startTime)) / 1000.0;
         speedBps := 0;
@@ -251,19 +334,19 @@ begin
           if percent <> lastPercent then
           begin
             lastPercent := percent;
-            Write(Format(#13'Progress: %3d%% (%d / %d bytes) %s/s', [
-              percent, 
-              BytesWritten, 
-              SizeBytes, 
-              FormatFloat('#,##0', speedBps)
+            Write(Format(#13'Progress: %3d%% (%s / %s) %s/s', [
+              percent,
+              FormatBytes(BytesWritten, Units),
+              FormatBytes(SizeBytes, Units),
+              FormatBytesPerTime(Round(speedBps), Units, TimeUnits)
             ]));
           end;
         end
         else if BytesWritten >= nextPrintAt then
         begin
-          Write(Format(#13'Written %d bytes (%s/s)', [
-            BytesWritten,
-            FormatFloat('#,##0', speedBps)
+          Write(Format(#13'Written %s (%s/s)', [
+            FormatBytes(BytesWritten, Units),
+            FormatBytes(Round(speedBps), Units, TimeUnits)
           ]));
           Inc(nextPrintAt, 64 * 1024 * 1024);
         end;
@@ -271,7 +354,7 @@ begin
     end;
 
     // final progress
-    if Verbose then
+    if (Verbose and (not Quiet)) then
     begin
       elapsedSec := (MilliSecondsBetween(Now, startTime)) / 1000.0;
       if elapsedSec > 0 then
@@ -279,7 +362,7 @@ begin
       else
         speedBps := 0;
       WriteLn;  // newline after progress line
-      WriteLn('Finished writing. Total bytes: ', BytesWritten, ' Elapsed sec: ', FormatFloat('0.0', elapsedSec), ' Speed bytes/s: ', FormatFloat('#,##0', speedBps));
+      WriteLn('Finished writing. Total: ', FormatBytes(BytesWritten, Units), ' Elapsed sec: ', FormatFloat('0.0', elapsedSec), ' Speed: ', FormatBytes(Round(speedBps), Units, TimeUnits));
     end;
 
     Result := BytesWritten;
@@ -296,6 +379,12 @@ var
   DryRun: Boolean;
   Verbose: Boolean;
   written: QWord;
+  UnitsStr: string;
+  TimeUnitStr: string;
+  Quiet: Boolean;
+  Benchmark: Boolean;
+  BlockSizeOverride: QWord;
+  VerboseForCall: Boolean;
 begin
   // Show help by default if no parameters
   if (ParamCount = 0) or HasOption('h', 'help') then
@@ -323,6 +412,23 @@ begin
 
   DryRun := HasOption('n') or HasOption('dry-run');
   Verbose := HasOption('v') or HasOption('verbose');
+  Quiet := HasOption('q') or HasOption('quiet');
+  // benchmark mode (suppress progress, keep final summary unless quiet)
+  Benchmark := HasOption('b') or HasOption('benchmark');
+
+  // units: b, kb, mb, gb, tb (default mb)
+  UnitsStr := GetOptionValue('u', 'units');
+  if UnitsStr = '' then UnitsStr := 'mb';
+
+  // time units for rates: s, m, h (default s)
+  TimeUnitStr := GetOptionValue('t', 'time-units');
+  if not (LowerCase(TimeUnitStr) in ['s', 'm', 'h']) then
+    TimeUnitStr := 's';
+
+  // block size override: -B/--block-size
+  BlockSizeOverride := 0;
+  if GetOptionValue('B', 'block-size') <> '' then
+    BlockSizeOverride := ParseSize(GetOptionValue('B', 'block-size'));
 
   // If verbose or dry-run, show planned action
   if DryRun or Verbose then
@@ -330,7 +436,11 @@ begin
     if SizeBytes = 0 then
       WriteLn('Planned: create file ', OutFileName, ' and fill disk until full')
     else
-      WriteLn('Planned: create file ', OutFileName, ' with size ', SizeBytes, ' bytes');
+      WriteLn('Planned: create file ', OutFileName, ' with size ', FormatBytes(SizeBytes, UnitsStr));
+    if BlockSizeOverride > 0 then
+      WriteLn('Block size override: ', FormatBytes(BlockSizeOverride, UnitsStr));
+    if Benchmark then
+      WriteLn('Benchmark mode: suppressing progress updates, final summary only');
     if DryRun then
     begin
       WriteLn('Dry-run: no file will be created.');
@@ -341,11 +451,15 @@ begin
 
   // Create the requested file (SizeBytes=0 => fill until disk full)
   try
-    written := CreateRandomFile(OutFileName, SizeBytes, DryRun, Verbose);
-    if written > 0 then
-      WriteLn('Created ', OutFileName, ' (', written, ' bytes)')
-    else if (not DryRun) and Verbose then
-      WriteLn('No bytes written (check permissions or disk space).');
+    VerboseForCall := Verbose and (not Benchmark);
+    written := CreateRandomFile(OutFileName, SizeBytes, DryRun, VerboseForCall, UnitsStr, TimeUnitStr, Quiet, BlockSizeOverride);
+    if (not Quiet) then
+    begin
+      if written > 0 then
+        WriteLn('Created ', OutFileName, ' (', FormatBytes(written, UnitsStr), ')')
+      else if (not DryRun) and Verbose then
+        WriteLn('No bytes written (check permissions or disk space).');
+    end;
   except
     on E: Exception do
       WriteLn('Error while creating file: ', E.Message);
@@ -390,10 +504,17 @@ begin
   WriteLn('                       Size can use K, M, G, T suffixes');
   WriteLn('  -n, --dry-run        Show what would be done');
   WriteLn('  -v, --verbose        Show progress and speed');
+  WriteLn('  -q, --quiet          Silence all output (overrides verbose/benchmark)');
+  WriteLn('  -b, --benchmark      Run without progress updates (final summary only)');
+  WriteLn('  -B, --block-size=SZ  Block size to use for writes (e.g. 1M, 16M). Default 16M');
+  WriteLn('  -u, --units=UNIT     Units for output: b, kb, mb, gb, tb (default: mb)');
+  WriteLn('  -t, --time-units=U   Time units for rates: s, m, h (default: s)');
   WriteLn;
   WriteLn('Example:');
-  WriteLn('  ', ExeName, ' -s 100M output.bin    Create 100 MiB file');
-  WriteLn('  ', ExeName, ' --verbose data.bin    Fill disk with random data');
+  WriteLn('  ', ExeName, ' -s 100M output.bin       Create 100 MiB file');
+  WriteLn('  ', ExeName, ' --verbose data.bin       Fill disk with random data');
+  WriteLn('  ', ExeName, ' -s 5G -u gb -v out.bin  Create 5 GiB showing GB output');
+  WriteLn('  ', ExeName, ' -s 1G -t h out.bin      Show speeds in bytes/hour');
 end;
 
 var
