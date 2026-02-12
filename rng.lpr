@@ -20,6 +20,10 @@ type
     procedure getrng;
   end;
 
+const
+  version = '0.1, 2026-02-12 10:04';
+
+
 function ParseSize(const s: string): QWord;
 var
   numStr: string;
@@ -235,7 +239,7 @@ begin
     Result := 0;
 end;
 
-function CreateRandomFile(const FileName: string; const SizeBytes: QWord; const DryRun: Boolean; const Verbose: Boolean; const Units: string; const TimeUnits: string; const Quiet: Boolean; const BlockSizeOverride: QWord): QWord;
+function CreateRandomFile(const FileName: string; const SizeBytes: QWord; const DryRun: Boolean; const Verbose: Boolean; const Units: string; const TimeUnits: string; const Quiet: Boolean; const BlockSizeOverride: QWord; const UseZeros: Boolean = False): QWord;
 const
   DefaultBlockSize = 16 shl 20; // 16 MiB
 var
@@ -298,11 +302,21 @@ begin
         if ToWrite >= BlockSize then ToWrite := BlockSize;
       end;
 
-      // fill buffer with rdrand values in bulk
-      if (ToWrite div SizeOf(QWord)) > 0 then
+      // fill buffer with zeros or rdrand values
+      if UseZeros then
       begin
-        FillRDRAND64Ptr(@Buf[0], ToWrite div SizeOf(QWord), rdrandOk);
-        // FillRDRAND64Ptr already falls back to Pascal Random for failed entries
+        // Fill buffer with zeros (fast)
+        FillChar(Buf[0], WordsInBlock * SizeOf(QWord), 0);
+      end
+      else
+      begin
+        // fill buffer with rdrand values in bulk - generate fresh data for entire buffer
+        // This ensures no repeated data from previous iterations, even if ToWrite varies
+        if WordsInBlock > 0 then
+        begin
+          FillRDRAND64Ptr(@Buf[0], WordsInBlock, rdrandOk);
+          // FillRDRAND64Ptr already falls back to Pascal Random for failed entries
+        end;
       end;
 
       // perform write; if disk full / IO error occurs we'll catch and break
@@ -384,6 +398,7 @@ var
   s_timestr: string;
   Quiet: Boolean;
   Benchmark: Boolean;
+  UseZeros: Boolean;
   BlockSizeOverride: QWord;
   VerboseForCall: Boolean;
 begin
@@ -411,11 +426,12 @@ begin
   if HasOption('s', 'size') then
     SizeBytes := ParseSize(GetOptionValue('s', 'size'));
 
-  DryRun := HasOption('n') or HasOption('dry-run');
-  Verbose := HasOption('v') or HasOption('verbose');
-  Quiet := HasOption('q') or HasOption('quiet');
+  DryRun := HasOption('n', 'dry-run');
+  Verbose := HasOption('v', 'verbose');
+  Quiet := HasOption('q', 'quiet');
+  UseZeros := HasOption('z', 'use-zeros');
   // benchmark mode (suppress progress, keep final summary unless quiet)
-  Benchmark := HasOption('b') or HasOption('benchmark');
+  Benchmark := HasOption('b', 'benchmark');
 
   // units: b, kb, mb, gb, tb (default mb)
   UnitsStr := GetOptionValue('u', 'units');
@@ -448,6 +464,10 @@ begin
       WriteLn('Planned: create file ', OutFileName, ' and fill disk until full')
     else
       WriteLn('Planned: create file ', OutFileName, ' with size ', FormatBytes(SizeBytes, UnitsStr));
+    if UseZeros then
+      WriteLn('Mode: filling with zeros (fast)')
+    else
+      WriteLn('Mode: filling with random data (RDRAND)');
     if BlockSizeOverride > 0 then
       WriteLn('Block size override: ', FormatBytes(BlockSizeOverride, UnitsStr));
     if Benchmark then
@@ -463,7 +483,7 @@ begin
   // Create the requested file (SizeBytes=0 => fill until disk full)
   try
     VerboseForCall := Verbose and (not Benchmark);
-    written := CreateRandomFile(OutFileName, SizeBytes, DryRun, VerboseForCall, UnitsStr, TimeUnitStr, Quiet, BlockSizeOverride);
+    written := CreateRandomFile(OutFileName, SizeBytes, DryRun, VerboseForCall, UnitsStr, TimeUnitStr, Quiet, BlockSizeOverride, UseZeros);
     if (not Quiet) then
     begin
       if written > 0 then
@@ -507,25 +527,27 @@ end;
 
 procedure TRng.WriteHelp;
 begin
-  WriteLn('Usage: ', ExeName, ' [options] [filename]');
+  WriteLn('rng - Create file filled with RDRAND random data'); WriteLn('Version: ', version);
+  WriteLn('Usage: ', ExeName, ' [options]');
   WriteLn('Options:');
-  WriteLn('  -h, --help           Show this help');
-  WriteLn('  -o, --outfile=FILE   Output file (default: rdrand.bin)');
-  WriteLn('  -s, --size=SIZE      Size to write (default: fill disk)');
-  WriteLn('                       Size can use K, M, G, T suffixes');
-  WriteLn('  -n, --dry-run        Show what would be done');
-  WriteLn('  -v, --verbose        Show progress and speed');
-  WriteLn('  -q, --quiet          Silence all output (overrides verbose/benchmark)');
-  WriteLn('  -b, --benchmark      Run without progress updates (final summary only)');
-  WriteLn('  -B, --block-size=SZ  Block size to use for writes (e.g. 1M, 16M). Default 16M');
-  WriteLn('  -u, --units=UNIT     Units for output: b, kb, mb, gb, tb (default: mb)');
-  WriteLn('  -t, --time-units=U   Time units for rates: s, m, h (default: s)');
+  WriteLn('  -h, --help              Show this help');
+  WriteLn('  -o, --outfile=FILE      Output file (default: rdrand.bin)');
+  WriteLn('  -s, --size=SIZE         Size to write (default: fill disk)');
+  WriteLn('                          Size can use K, M, G, T suffixes');
+  WriteLn('  -z, --use-zeros         Fill with zeros instead of random (faster)');
+  WriteLn('  -n, --dry-run           Show what would be done without creating file');
+  WriteLn('  -v, --verbose           Show progress and speed');
+  WriteLn('  -q, --quiet             Silence all output (overrides verbose/benchmark)');
+  WriteLn('  -b, --benchmark         Run without progress updates (final summary only)');
+  WriteLn('  -B, --block-size=SZ     Block size to use for writes (e.g. 1M, 16M). Default 16M');
+  WriteLn('  -u, --units=UNIT        Units for output: b, kb, mb, gb, tb (default: mb)');
+  WriteLn('  -t, --time-units=U      Time units for rates: s, m, h (default: s)');
   WriteLn;
-  WriteLn('Example:');
-  WriteLn('  ', ExeName, ' -s 100M output.bin       Create 100 MiB file');
-  WriteLn('  ', ExeName, ' --verbose data.bin       Fill disk with random data');
-  WriteLn('  ', ExeName, ' -s 5G -u gb -v out.bin  Create 5 GiB showing GB output');
-  WriteLn('  ', ExeName, ' -s 1G -t h out.bin      Show speeds in bytes/hour');
+  WriteLn('Examples:');
+  WriteLn('  ', ExeName, ' -o output.bin -s 100M      Create 100 MiB file with random data');
+  WriteLn('  ', ExeName, ' -o data.bin --use-zeros     Fill disk with zeros (fast)');
+  WriteLn('  ', ExeName, ' -o out.bin -s 5G -u gb -v  Create 5 GiB showing GB output');
+  WriteLn('  ', ExeName, ' -o out.bin -s 1G -t h      Show speeds in bytes/hour');
 end;
 
 var
