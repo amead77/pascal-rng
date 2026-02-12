@@ -20,6 +20,9 @@ type
     procedure getrng;
   end;
 
+const
+  version = '0.1, 2026-02-12 10:04';
+
 function ParseSize(const s: string): QWord;
 var
   numStr: string;
@@ -365,6 +368,7 @@ end;
 
 procedure TRng.WriteHelp;
 begin
+  WriteLn('rng - Create file filled with RDRAND random data'); WriteLn('Version: ', version);
   WriteLn('Usage: ', ExeName, ' [options]');
   WriteLn('Options:');
   WriteLn('  -h, --help              Show this help');
