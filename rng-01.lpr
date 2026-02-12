@@ -128,7 +128,7 @@ begin
   {$ENDIF}
 end;
 
-function CreateRandomFile(const FileName: string; const SizeBytes: QWord; const DryRun: Boolean; const Verbose: Boolean): QWord;
+function CreateRandomFile(const FileName: string; const SizeBytes: QWord; const DryRun: Boolean; const Verbose: Boolean; const UseZeros: Boolean = False): QWord;
 const
   DefaultBlockSize = 1 shl 20; // 1 MiB
 var
@@ -187,14 +187,24 @@ begin
         if ToWrite >= BlockSize then ToWrite := BlockSize;
       end;
 
-      // fill buffer with rdrand values
-      for i := 0 to (ToWrite div SizeOf(QWord)) - 1 do
+      // fill buffer with zeros or random values
+      if UseZeros then
       begin
-        v := GetRDRAND64;
-        // if rdrand failed and returned 0, fallback to Pascal random
-        if v = 0 then
-          v := QWord(Random($FFFFFFFF)) shl 32 or QWord(Random($FFFFFFFF));
-        Buf[i] := v;
+        // Fill buffer with zeros (fast)
+        FillChar(Buf[0], ToWrite, 0);
+      end
+      else
+      begin
+        // fill buffer with rdrand values - generate fresh data for entire buffer
+        // This ensures no repeated data from previous iterations, even if ToWrite varies
+        for i := 0 to WordsInBlock - 1 do
+        begin
+          v := GetRDRAND64;
+          // if rdrand failed and returned 0, fallback to Pascal random
+          if v = 0 then
+            v := QWord(Random($FFFFFFFF)) shl 32 or QWord(Random($FFFFFFFF));
+          Buf[i] := v;
+        end;
       end;
 
       // perform write; if disk full / IO error occurs we'll catch and break
@@ -268,6 +278,7 @@ var
   SizeBytes: QWord;
   DryRun: Boolean;
   Verbose: Boolean;
+  UseZeros: Boolean;
   written: QWord;
 begin
   // Show help by default if no parameters
@@ -281,21 +292,16 @@ begin
   // Get options using built-in parser
   OutFileName := GetOptionValue('o', 'outfile');
   if OutFileName = '' then
-  begin
-    // Check for positional argument
-    if ParamCount > 0 then
-      OutFileName := ParamStr(ParamCount)
-    else
-      OutFileName := 'rdrand.bin';
-  end;
+    OutFileName := 'rdrand.bin';
 
   // Parse size if provided
   SizeBytes := 0; // 0 => fill until disk full
   if HasOption('s', 'size') then
     SizeBytes := ParseSize(GetOptionValue('s', 'size'));
 
-  DryRun := HasOption('n') or HasOption('dry-run');
-  Verbose := HasOption('v') or HasOption('verbose');
+  DryRun := HasOption('n', 'dry-run');
+  Verbose := HasOption('v', 'verbose');
+  UseZeros := HasOption('z', 'use-zeros');
 
   // If verbose or dry-run, show planned action
   if DryRun or Verbose then
@@ -304,6 +310,10 @@ begin
       WriteLn('Planned: create file ', OutFileName, ' and fill disk until full')
     else
       WriteLn('Planned: create file ', OutFileName, ' with size ', SizeBytes, ' bytes');
+    if UseZeros then
+      WriteLn('Mode: filling with zeros')
+    else
+      WriteLn('Mode: filling with random data (RDRAND)');
     if DryRun then
     begin
       WriteLn('Dry-run: no file will be created.');
@@ -314,7 +324,7 @@ begin
 
   // Create the requested file (SizeBytes=0 => fill until disk full)
   try
-    written := CreateRandomFile(OutFileName, SizeBytes, DryRun, Verbose);
+    written := CreateRandomFile(OutFileName, SizeBytes, DryRun, Verbose, UseZeros);
     if written > 0 then
       WriteLn('Created ', OutFileName, ' (', written, ' bytes)')
     else if (not DryRun) and Verbose then
@@ -355,18 +365,21 @@ end;
 
 procedure TRng.WriteHelp;
 begin
-  WriteLn('Usage: ', ExeName, ' [options] [filename]');
+  WriteLn('Usage: ', ExeName, ' [options]');
   WriteLn('Options:');
-  WriteLn('  -h, --help           Show this help');
-  WriteLn('  -o, --outfile=FILE   Output file (default: rdrand.bin)');
-  WriteLn('  -s, --size=SIZE      Size to write (default: fill disk)');
-  WriteLn('                       Size can use K, M, G, T suffixes');
-  WriteLn('  -n, --dry-run        Show what would be done');
-  WriteLn('  -v, --verbose        Show progress and speed');
+  WriteLn('  -h, --help              Show this help');
+  WriteLn('  -o, --outfile=FILE      Output file (default: rdrand.bin)');
+  WriteLn('  -s, --size=SIZE         Size to write (default: fill disk)');
+  WriteLn('                          Size can use K, M, G, T suffixes');
+  WriteLn('  -z, --use-zeros         Fill with zeros instead of random (faster)');
+  WriteLn('  -n, --dry-run           Show what would be done without creating file');
+  WriteLn('  -v, --verbose           Show progress and speed');
   WriteLn;
-  WriteLn('Example:');
-  WriteLn('  ', ExeName, ' -s 100M output.bin    Create 100 MiB file');
-  WriteLn('  ', ExeName, ' --verbose data.bin    Fill disk with random data');
+  WriteLn('Examples:');
+  WriteLn('  ', ExeName, ' -o output.bin -s 100M      Create 100 MiB file with random data');
+  WriteLn('  ', ExeName, ' -o data.bin --use-zeros      Fill disk with zeros (fast)');
+  WriteLn('  ', ExeName, ' -o test.bin -s 1G -v -z      Create 1 GiB file of zeros, verbose mode');
+  WriteLn('  ', ExeName, ' -s 500M --dry-run             Show what would happen');
 end;
 
 var
