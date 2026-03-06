@@ -3,13 +3,13 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Default"/>
+    <BuildModes Active="win64"/>
     <Units>
       <Unit>
         <Filename Value="rng.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="393"/>
+        <TopLine Value="394"/>
         <CursorPos X="17" Y="427"/>
         <UsageCount Value="23"/>
         <Loaded Value="True"/>

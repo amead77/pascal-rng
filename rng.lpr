@@ -20,8 +20,11 @@ type
     procedure getrng;
   end;
 
+
 const
-  version = '0.1, 2026-02-12 10:49';
+
+//AUTO-V
+  version = 'v0.1-2026/03/06r03';
 
 
 function ParseSize(const s: string): QWord;
