@@ -24,7 +24,7 @@ type
 const
 
 //AUTO-V
-  version = 'v0.1-2026/03/06r03';
+  version = 'v0.1-2026/03/06r04';
 
 
 function ParseSize(const s: string): QWord;
@@ -149,7 +149,7 @@ begin
   end;
   // Bit 30 of ECX indicates RDRAND support
   Result := (vecx and (1 shl 30)) <> 0;
-  writeln('end rdran check');
+  writeln('end rdrand check');
 end;
 
 // Fill `count` 64-bit words at pointer `p` using RDRAND. Returns True if all
