@@ -1,4 +1,4 @@
-### rng.lpr
+# rng.lpr
 
 This program can be compiled with Freepascal/Lazarus on Linux or Windows, maybe even Mac.
 
@@ -7,7 +7,7 @@ This program can be compiled with Freepascal/Lazarus on Linux or Windows, maybe 
 I originally created it to test out the RDRAND instruction in modern CPUs.
 Because I wanted to wipe a disk before gifting it away, I decided to expand the scope of this to do it.
 
-# Note, it does not delete any files. Deleting the data is your responsibility (format), this is to make data unrecoverable by overwriting all free space.
+## Note, it does not delete any files. Deleting the data is your responsibility (format), this is to make data unrecoverable by overwriting all free space.
 
 Anyway, after messing with the program a bit, I decided to make a repo and let AI add extra functionality, while also improving my code.
 I wrote the initial program in Pascal, because I wanted to use assembly, but at the same time, did not want the bullsh!t that comes with writing in pure asm. As an older person who started with Pascal in the 90s, I decided inline asm for the RDRAND part, and pascal for the bulk.
