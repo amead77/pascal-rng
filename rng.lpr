@@ -1,3 +1,8 @@
+(*
+RNG: file generator with selectable random source and progress reporting.
+Purpose was originally to rest RDRAND and use it to fill a disk with random data.
+That only lasted until I decided to let AI touch it, with instruction to improve my trash assembly code and add features.
+*)
 program rng;
 {$IF defined(CPUX86) or defined(CPUX86_64)}
 {$ASMMODE INTEL}
@@ -41,7 +46,7 @@ type
 const
 
 //AUTO-V
-  version = 'v0.1-2026/03/06r11';
+  version = 'v0.1-2026/03/17r00';
 
 {$IFDEF WINDOWS}
 const
